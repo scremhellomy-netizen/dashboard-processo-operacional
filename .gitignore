@@ -1,0 +1,15 @@
+# Arquivos locais de trabalho
+*.xlsx
+*.xls
+*.csv
+*.json
+*.json.gz
+*.gz
+
+# Dados que fazem parte da publicação
+!data/
+!data/manifest.json
+!data/*.json.gz
+
+.vscode/
+__pycache__/

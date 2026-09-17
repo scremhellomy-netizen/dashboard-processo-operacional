@@ -16,7 +16,7 @@ $map=@{
 "Expedição - EscalaSoft.json.gz"="expedicao.json.gz"}
 New-Item -ItemType Directory -Force -Path "data" | Out-Null
 foreach($name in $required){$src=Join-Path "dados_para_publicar" $name;if(-not(Test-Path $src)){throw "Arquivo obrigatório não encontrado: $src"};Copy-Item $src (Join-Path "data" $map[$name]) -Force}
-[ordered]$manifest=@{atualizado_em=(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");arquivos=@("recebimento.json.gz","embalagem.json.gz","armazenagem.json.gz","expedicao.json.gz");origem="dados publicados pelo responsável do dashboard"} 
+$manifest = [ordered]@{atualizado_em=(Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ");arquivos=@("recebimento.json.gz","embalagem.json.gz","armazenagem.json.gz","expedicao.json.gz");origem="dados publicados pelo responsável do dashboard"} 
 $manifest | ConvertTo-Json -Depth 5 | Set-Content "data/manifest.json" -Encoding UTF8
 if(-not(Test-Path ".git")){git init;git branch -M main}
 if($Repositorio -eq ""){$Repositorio=git remote get-url origin 2>$null}

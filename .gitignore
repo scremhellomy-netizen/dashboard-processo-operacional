@@ -13,3 +13,5 @@
 
 .vscode/
 __pycache__/
+erro_atualizacao.log
+backup_bases/

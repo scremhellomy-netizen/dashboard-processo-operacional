@@ -1,4 +1,4 @@
-param()
+﻿param()
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $log = Join-Path $root 'erro_atualizacao.log'
@@ -11,10 +11,23 @@ $published = $false
 
 function Invoke-Git {
     param([Parameter(Mandatory=$true)][string[]]$GitArgs)
-    $result = @(& git.exe @GitArgs 2>&1)
-    $code = $LASTEXITCODE
-    if ($code -ne 0) { throw "git $($GitArgs -join ' ') falhou ($code): $($result -join ' ')" }
-    return $result
+
+    $previousPreference = $ErrorActionPreference
+
+    try {
+        $ErrorActionPreference = 'Continue'
+        $result = @(& git.exe @GitArgs 2>&1)
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    if ($code -ne 0) {
+        throw "git $($GitArgs -join ' ') falhou ($code): $($result -join ' ')"
+    }
+
+    return @($result | ForEach-Object { $_.ToString() })
 }
 function Normalize-Name([string]$name) {
     $name = [regex]::Replace($name, '#U([0-9a-fA-F]{4})', { param($m) [char][Convert]::ToInt32($m.Groups[1].Value,16) })

@@ -1,0 +1,30 @@
+DASHBOARD PROCESSO OPERACIONAL - EVOLUCAO DOS ALERTAS
+
+ARQUIVO: index.html
+
+INSTALACAO
+1. Faça backup do index.html atual.
+2. Como voce ainda nao instalou o pacote anterior de graficos/ST, este HTML JA INCLUI as melhorias anteriores.
+3. Substitua apenas index.html na pasta do repositorio local.
+4. No PowerShell, dentro da pasta do repositorio:
+   git status --short
+   git add index.html
+   git commit -m "Adiciona evolucao diaria de alertas e indicadores"
+   git pull --rebase origin master
+   git push origin master
+5. Se ocorrer conflito no pull, interrompa e encaminhe a mensagem.
+
+COMO FUNCIONA
+- Nova aba 'Evolucao dos alertas' com seletor de processos e indicadores.
+- O navegador salva uma fotografia por data quando carrega as quatro bases publicadas.
+- Compara identificadores das ocorrencias entre fotografias: deixaram o alerta (potencialmente tratadas), novas e reducao liquida.
+- Os indicadores agregados exibem evolucao de quantidade, mas nao itens tratados individualmente.
+- O historico fica no armazenamento local do navegador e pode ser exportado/importado em JSON.
+- Nao ha reconstrução retroativa: a primeira fotografia so cria a linha de base; a segunda data permite medir evolucao.
+- Outros computadores/navegadores nao compartilham automaticamente o historico. Para isso, exporte e importe o JSON.
+- Fotografias usam as bases completas, independentemente do filtro de mes.
+- Atualizacao manual com arquivos locais NAO cria fotografia, evitando misturar dados nao publicados.
+- Mesma data substitui a fotografia anterior; nao inventa dias sem atualizacao.
+- 'Tratada' significa que a serie saiu da lista de alertas, nao que houve comprovacao de tratamento operacional.
+
+O pacote nao altera BAT, PS1 nem as bases de dados.

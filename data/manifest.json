@@ -1,10 +1,10 @@
-{
-  "atualizado_em": "2026-09-16T15:18:33+00:00",
-  "arquivos": [
-    "recebimento.json.gz",
-    "embalagem.json.gz",
-    "armazenagem.json.gz",
-    "expedicao.json.gz"
-  ],
-  "origem": "dados publicados pelo responsável do dashboard"
+﻿{
+    "atualizado_em":  "2026-10-27T16:30:26Z",
+    "arquivos":  [
+                     "recebimento.json.gz",
+                     "embalagem.json.gz",
+                     "armazenagem.json.gz",
+                     "expedicao.json.gz"
+                 ],
+    "origem":  "dados publicados pelo responsável do dashboard"
 }

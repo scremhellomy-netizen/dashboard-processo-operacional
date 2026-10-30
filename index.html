@@ -22,6 +22,11 @@ canvas{width:100%;height:280px;display:block}.chart-note{font-size:11px;color:va
 .op-sidebar{position:fixed;left:0;top:0;bottom:0;width:240px;background:var(--panel);border-right:1px solid var(--border);z-index:40;display:flex;flex-direction:column;transition:width .2s ease;box-shadow:var(--shadow)}
 .op-side-head{display:flex;align-items:center;gap:10px;padding:16px 10px;border-bottom:1px solid var(--border)}.op-side-title{font-weight:700;white-space:nowrap;overflow:hidden;flex:1}.op-side-toggle{padding:6px 9px;flex-shrink:0}.op-side-month{padding:12px;border-bottom:1px solid var(--border)}.op-side-month label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}.op-side-month select{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px}.op-side-links{overflow:auto;flex:1;padding:8px}.op-side-link{display:flex;align-items:center;gap:10px;width:100%;padding:10px;border:1px solid transparent;background:transparent;color:var(--text);border-radius:7px;text-align:left;cursor:pointer;font:inherit;margin-bottom:4px}.op-side-link:hover{background:rgba(100,120,160,.1)}.op-side-link.active{background:var(--accent);color:white}.op-side-icon{font-size:16px;width:22px;text-align:center;flex-shrink:0}.op-side-link-label{white-space:nowrap;overflow:hidden}.wrap{margin-left:240px;max-width:none;transition:margin-left .2s ease}.op-sidebar.collapsed{width:65px}.op-sidebar.collapsed .op-side-title,.op-sidebar.collapsed .op-side-month,.op-sidebar.collapsed .op-side-link-label{display:none}.op-sidebar.collapsed .op-side-head{flex-wrap:wrap;justify-content:center}.op-sidebar.collapsed .op-side-links{padding:6px}.op-sidebar.collapsed .op-side-link{justify-content:center;padding:10px 5px}.op-sidebar.collapsed~.wrap{margin-left:65px}.op-mobile-toggle{display:none}.op-side-overlay{display:none}
 @media(max-width:850px){.op-sidebar{transform:translateX(-100%);width:240px!important;transition:transform .2s ease}.op-sidebar.mobile-open{transform:translateX(0)}.op-sidebar .op-side-title,.op-sidebar .op-side-month,.op-sidebar .op-side-link-label{display:block!important}.op-sidebar .op-side-link{justify-content:flex-start!important}.wrap,.op-sidebar.collapsed~.wrap{margin-left:0}.op-mobile-toggle{display:block;position:sticky;top:5px;z-index:35;margin:8px 0 0 10px}.op-side-overlay.visible{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:39}}
+/* Destaque neon exclusivo do SLA no detalhamento de movimentos */
+.evo-sla{display:inline-block;min-width:48px;text-align:center;padding:5px 9px;border-radius:6px;font-weight:800;font-variant-numeric:tabular-nums;background:rgba(0,232,163,.16);color:#00d69b;border:1px solid rgba(0,232,163,.48);box-shadow:0 0 9px rgba(0,232,163,.13)}
+.evo-sla.mid{background:rgba(250,202,45,.16);color:#e2b500;border-color:rgba(250,202,45,.55);box-shadow:0 0 9px rgba(250,202,45,.13)}
+.evo-sla.high{background:rgba(255,70,159,.17);color:#ff4caa;border-color:rgba(255,70,159,.56);box-shadow:0 0 10px rgba(255,70,159,.16)}
+body.dark .evo-sla{color:#35ffbd}body.dark .evo-sla.mid{color:#ffe45a}body.dark .evo-sla.high{color:#ff79bc}
 </style></head>
 <body class="dark">
 <aside class="op-sidebar" id="opSidebar" aria-label="Navegação do dashboard"><div class="op-side-head"><span class="ao-logo" aria-label="AO - Análise operacional">AO</span><span class="op-side-title">Análise operacional</span><button type="button" class="btn op-side-toggle" id="sideToggle" title="Recolher menu" aria-label="Recolher menu">☰</button></div><div class="op-side-month"><label for="sideMonthFilter">Mês de análise</label><select id="sideMonthFilter" disabled><option value="">Todos os meses</option></select></div><div class="op-side-links" id="sideLinks"></div></aside><button class="btn op-mobile-toggle" id="sideMobileToggle" type="button" aria-label="Abrir menu lateral">☰ Menu</button><div class="op-side-overlay" id="sideOverlay"></div><div class="wrap">
@@ -226,7 +231,19 @@ function evolutionEntryDates(){
  const map={};for(const r of state.rawData.arm){const s=serialInfo(field(r,['Nº_DE_SÉRIE']));if(!s.valid)continue;const dt=dateObj(field(r,['ENTRADA']));if(!dt)continue;const date=[dt.getFullYear(),String(dt.getMonth()+1).padStart(2,'0'),String(dt.getDate()).padStart(2,'0')].join('-');if(!map[s.n]||date<map[s.n])map[s.n]=date}
  return map;
 }
-function evolutionCaptureSnapshot(iso,metrics){if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length)return;let date=evolutionDay(iso),h=evolutionHistory();let existing=h.findIndex(x=>x.date===date);let snap={date,metrics,updated:iso||new Date().toISOString(),entryDates:evolutionEntryDates()};if(existing>=0)h[existing]=snap;else h.push(snap);h.sort((a,b)=>a.date.localeCompare(b.date));try{evolutionSave(h)}catch(e){console.warn('Histórico local não pôde ser salvo:',e)}renderEvolution()}
+// Dados de rastreabilidade registrados na fotografia; fotografias antigas usam
+// a base atual como referência, sem atribuir retroativamente uma data histórica.
+function evolutionStorageDetails(){
+ const result={};
+ for(const r of state.rawData.arm){
+  const s=serialInfo(field(r,['Nº_DE_SÉRIE']));if(!s.valid)continue;
+  const dt=dateObj(field(r,['ENTRADA']));const date=dt?[dt.getFullYear(),String(dt.getMonth()+1).padStart(2,'0'),String(dt.getDate()).padStart(2,'0')].join('-'):null;
+  const detail={user:String(field(r,['USUÁRIO_REGISTRO'])||'').trim(),deposit:String(field(r,['DEPÓSITO'])||'').trim(),address:String(field(r,['ENDEREÇO'])||'').trim(),entry:date};
+  if(!result[s.n]||(date&&(!result[s.n].entry||date<result[s.n].entry)))result[s.n]=detail;
+ }
+ return result;
+}
+function evolutionCaptureSnapshot(iso,metrics){if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length)return;let date=evolutionDay(iso),h=evolutionHistory();let existing=h.findIndex(x=>x.date===date);let snap={date,metrics,updated:iso||new Date().toISOString(),entryDates:evolutionEntryDates(),storageDetails:evolutionStorageDetails()};if(existing>=0)h[existing]=snap;else h.push(snap);h.sort((a,b)=>a.date.localeCompare(b.date));try{evolutionSave(h)}catch(e){console.warn('Histórico local não pôde ser salvo:',e)}renderEvolution()}
 function evolutionDelta(prev,cur){let before=new Set(prev?.ids||[]),after=new Set(cur?.ids||[]);if(!prev||!cur||!Array.isArray(prev.ids)||!Array.isArray(cur.ids))return null;return {treated:[...before].filter(x=>!after.has(x)).length,added:[...after].filter(x=>!before.has(x)).length}}
 const evolutionSelectedTopics=new Set(['receivedMissing']);
 function evolutionSetupPicker(){
@@ -254,17 +271,18 @@ function evolutionAggregateDelta(prior,current){
  return complete?{treated,added}:null;
 }
 function evolutionMovementRows(history,keys){
- const rows=[];const today=evolutionDay();const days=(a,b)=>{const d1=new Date(a+'T12:00:00Z'),d2=new Date(b+'T12:00:00Z');return Number.isFinite(d1.getTime())&&Number.isFinite(d2.getTime())?Math.max(0,Math.floor((d2-d1)/86400000)):null};
+ const rows=[];const currentStorage=evolutionStorageDetails();const today=evolutionDay();const days=(a,b)=>{const d1=new Date(a+'T12:00:00Z'),d2=new Date(b+'T12:00:00Z');return Number.isFinite(d1.getTime())&&Number.isFinite(d2.getTime())?Math.max(0,Math.floor((d2-d1)/86400000)):null};
  for(let i=1;i<history.length;i++){
   const before=history[i-1],after=history[i];
   for(const key of keys){const a=before.metrics[key],b=after.metrics[key];if(!Array.isArray(a?.ids)||!Array.isArray(b?.ids))continue;
    const old=new Set(a.ids),now=new Set(b.ids);const label=EVOLUTION_TOPICS.find(t=>t[0]===key)?.[2]||key;
    for(const [type,ids] of [['treated',[...old].filter(id=>!now.has(id))],['added',[...now].filter(id=>!old.has(id))]])for(const serial of ids){
-    const entry=after.entryDates?.[serial]||before.entryDates?.[serial]||null;
+    const detail=after.storageDetails?.[serial]||before.storageDetails?.[serial]||currentStorage[serial]||{};
+    const entry=after.entryDates?.[serial]||before.entryDates?.[serial]||detail.entry||null;
     // Apenas movimentos ainda pendentes hoje usam a data atual para o SLA.
     const stillPending=type==='added'&&history[history.length-1].metrics[key]?.ids?.includes(serial);
     const end=type==='treated'?after.date:(stillPending?today:null);
-    rows.push({type,label,serial,entry,resolved:type==='treated'?after.date:null,observed:after.date,days:entry&&end?days(entry,end):null,stillPending});
+    rows.push({type,label,serial,entry,resolved:type==='treated'?after.date:null,observed:after.date,days:days(after.date,today),user:detail.user||null,deposit:detail.deposit||null,address:detail.address||null,stillPending});
    }
   }
  }
@@ -275,7 +293,7 @@ function renderEvolutionMovement(history,keys){
  const filter=$('evolutionMovementFilter').value;
  const rows=evolutionMovementRows(history,keys.filter(k=>EVOLUTION_TOPICS.find(t=>t[0]===k)?.[3]==='alert')).filter(r=>filter==='all'||r.type===filter);
  if(!rows.length){target.innerHTML='<div class="empty">Não há movimentos identificáveis entre fotografias para os indicadores e o filtro selecionados.</div>';return}
- target.innerHTML=`<div class="chart-note">${rows.length.toLocaleString('pt-BR')} movimento(s) · exibindo até 500 registros · SLA em dias corridos, ordenado do maior para o menor. “—” indica data indisponível.</div><div class="table-wrap"><table><thead><tr><th>Movimento</th><th>Indicador</th><th>Nº de série / identificação</th><th>Entrada na armazenagem</th><th>Data em que deixou o alerta</th><th>Fotografia do movimento</th><th>SLA (dias)</th></tr></thead><tbody>${rows.slice(0,500).map(r=>`<tr><td>${r.type==='treated'?'Deixaram os alertas':'Novas'}</td><td>${esc(r.label)}</td><td>${esc(r.serial)}</td><td>${r.entry?esc(r.entry):'—'}</td><td>${r.resolved?esc(r.resolved):'—'}</td><td>${esc(r.observed)}</td><td>${r.days===null?'—':r.days.toLocaleString('pt-BR')}${r.stillPending?' (pendente)':''}</td></tr>`).join('')}</tbody></table></div>`;
+ target.innerHTML=`<div class="chart-note">${rows.length.toLocaleString('pt-BR')} movimento(s) · exibindo até 500 registros · SLA: dias corridos da fotografia do movimento até hoje, ordenado do maior para o menor. “—” indica dado indisponível. Para fotografias antigas, usuário, depósito e endereço podem refletir o cadastro atual.</div><div class="table-wrap"><table><thead><tr><th>Movimento</th><th>Indicador</th><th>Nº de série / identificação</th><th>Usuário do registro</th><th>Depósito</th><th>Endereço</th><th>Entrada na armazenagem</th><th>Data em que deixou o alerta</th><th>Fotografia do movimento</th><th>SLA (dias)</th></tr></thead><tbody>${rows.slice(0,500).map(r=>`<tr><td>${r.type==='treated'?'Deixaram os alertas':'Novas'}</td><td>${esc(r.label)}</td><td>${esc(r.serial)}</td><td>${r.user?esc(r.user):'—'}</td><td>${r.deposit?esc(r.deposit):'—'}</td><td>${r.address?esc(r.address):'—'}</td><td>${r.entry?esc(r.entry):'—'}</td><td>${r.resolved?esc(r.resolved):'—'}</td><td>${esc(r.observed)}</td><td>${r.days===null?'—':`<span class="evo-sla ${r.days>=30?'high':r.days>=7?'mid':''}">${r.days.toLocaleString('pt-BR')}</span>`}${r.stillPending?' (pendente)':''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderEvolution(){
  if(!$('evolutionPickerBtn'))return;

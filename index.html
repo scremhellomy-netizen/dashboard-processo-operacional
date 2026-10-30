@@ -239,7 +239,7 @@ function evolutionStorageDetails(){
   const s=serialInfo(field(r,['Nº_DE_SÉRIE']));if(!s.valid)continue;
   const dt=dateObj(field(r,['ENTRADA']));const date=dt?[dt.getFullYear(),String(dt.getMonth()+1).padStart(2,'0'),String(dt.getDate()).padStart(2,'0')].join('-'):null;
   const detail={user:String(field(r,['USUÁRIO_REGISTRO'])||'').trim(),deposit:String(field(r,['DEPÓSITO'])||'').trim(),address:String(field(r,['ENDEREÇO'])||'').trim(),entry:date};
-  if(!result[s.n]||(date&&(!result[s.n].entry||date<result[s.n].entry)))result[s.n]=detail;
+  if(!result[s.n]||(date&&(!result[s.n].entry||date>result[s.n].entry)))result[s.n]=detail;
  }
  return result;
 }
@@ -282,18 +282,18 @@ function evolutionMovementRows(history,keys){
     // Apenas movimentos ainda pendentes hoje usam a data atual para o SLA.
     const stillPending=type==='added'&&history[history.length-1].metrics[key]?.ids?.includes(serial);
     const end=type==='treated'?after.date:(stillPending?today:null);
-    rows.push({type,label,serial,entry,resolved:type==='treated'?after.date:null,observed:after.date,days:days(after.date,today),user:detail.user||null,deposit:detail.deposit||null,address:detail.address||null,stillPending});
+    rows.push({type,label,serial,entry,resolved:type==='treated'?after.date:null,observed:after.date,days:days(after.date,today),user:currentStorage[serial]?.user||detail.user||null,deposit:detail.deposit||null,address:detail.address||null,stillPending});
    }
   }
  }
- return rows.sort((a,b)=>(b.days??-1)-(a.days??-1)||b.observed.localeCompare(a.observed));
+ return rows.sort((a,b)=>b.observed.localeCompare(a.observed)||(b.days??-1)-(a.days??-1));
 }
 function renderEvolutionMovement(history,keys){
  const target=$('evolutionMovementDetails');if(!target)return;
  const filter=$('evolutionMovementFilter').value;
  const rows=evolutionMovementRows(history,keys.filter(k=>EVOLUTION_TOPICS.find(t=>t[0]===k)?.[3]==='alert')).filter(r=>filter==='all'||r.type===filter);
  if(!rows.length){target.innerHTML='<div class="empty">Não há movimentos identificáveis entre fotografias para os indicadores e o filtro selecionados.</div>';return}
- target.innerHTML=`<div class="chart-note">${rows.length.toLocaleString('pt-BR')} movimento(s) · exibindo até 500 registros · SLA: dias corridos da fotografia do movimento até hoje, ordenado do maior para o menor. “—” indica dado indisponível. Para fotografias antigas, usuário, depósito e endereço podem refletir o cadastro atual.</div><div class="table-wrap"><table><thead><tr><th>Movimento</th><th>Indicador</th><th>Nº de série / identificação</th><th>Usuário do registro</th><th>Depósito</th><th>Endereço</th><th>Entrada na armazenagem</th><th>Data em que deixou o alerta</th><th>Fotografia do movimento</th><th>SLA (dias)</th></tr></thead><tbody>${rows.slice(0,500).map(r=>`<tr><td>${r.type==='treated'?'Deixaram os alertas':'Novas'}</td><td>${esc(r.label)}</td><td>${esc(r.serial)}</td><td>${r.user?esc(r.user):'—'}</td><td>${r.deposit?esc(r.deposit):'—'}</td><td>${r.address?esc(r.address):'—'}</td><td>${r.entry?esc(r.entry):'—'}</td><td>${r.resolved?esc(r.resolved):'—'}</td><td>${esc(r.observed)}</td><td>${r.days===null?'—':`<span class="evo-sla ${r.days>=30?'high':r.days>=7?'mid':''}">${r.days.toLocaleString('pt-BR')}</span>`}${r.stillPending?' (pendente)':''}</td></tr>`).join('')}</tbody></table></div>`;
+ target.innerHTML=`<div class="chart-note">${rows.length.toLocaleString('pt-BR')} movimento(s) · exibindo até 500 registros · SLA: dias corridos da fotografia do movimento até hoje, ordenado pela fotografia do movimento, da mais recente para a mais antiga. “—” indica dado indisponível. Para fotografias antigas, usuário, depósito e endereço podem refletir o cadastro atual.</div><div class="table-wrap"><table><thead><tr><th>Movimento</th><th>Indicador</th><th>Nº de série / identificação</th><th>Usuário do registro</th><th>Depósito</th><th>Endereço</th><th>Entrada na armazenagem</th><th>Fotografia do movimento</th><th>SLA</th></tr></thead><tbody>${rows.slice(0,500).map(r=>`<tr><td>${r.type==='treated'?'Deixaram os alertas':'Novas'}</td><td>${esc(r.label)}</td><td>${esc(r.serial)}</td><td>${r.user?esc(r.user):'—'}</td><td>${r.deposit?esc(r.deposit):'—'}</td><td>${r.address?esc(r.address):'—'}</td><td>${r.entry?esc(r.entry):'—'}</td><td>${esc(r.observed)}</td><td>${r.days===null?'—':`<span class="evo-sla ${r.days>=30?'high':r.days>=7?'mid':''}">${r.days.toLocaleString('pt-BR')}</span>`}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function renderEvolution(){
  if(!$('evolutionPickerBtn'))return;

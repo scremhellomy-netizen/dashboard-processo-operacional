@@ -64,7 +64,7 @@ canvas{width:100%;height:280px;display:block}.chart-note{font-size:11px;color:va
       <div class="filters" style="align-items:center"><label for="evolutionPickerBtn">Processos / indicadores</label><div class="evo-picker" id="evolutionPicker"><button type="button" class="btn" id="evolutionPickerBtn" aria-expanded="false" aria-controls="evolutionMenu">Selecionar indicadores <span>▾</span></button><div id="evolutionMenu" class="evo-menu" hidden><div class="evo-picker-actions"><button type="button" class="btn" id="evolutionSelectAll">Selecionar todos</button><button type="button" class="btn" id="evolutionClearInside">Limpar</button></div><div id="evolutionOptions"></div></div></div><button type="button" class="btn" id="evolutionClear">Limpar filtros</button><button class="btn" id="exportHistory">Exportar histórico</button><button class="btn" id="exportEvolutionCSV" type="button">Exportar ocorrências CSV</button><label class="btn" for="importHistory" style="cursor:pointer">Importar histórico</label><input type="file" id="importHistory" accept=".json,application/json" style="display:none"></div>
       <div class="evo-selected" id="evolutionSelected"></div><div class="chart-note" id="evolutionSelectionNote">Selecione um ou mais indicadores. A seleção múltipla soma as ocorrências de cada indicador; um mesmo equipamento pode aparecer em mais de um alerta.</div><div class="grid cards" id="evolutionCards"></div>
       <div class="grid two" style="margin-top:12px"><div class="section"><h2>Ocorrências por data</h2><div class="chart-note">Eixo horizontal: data da fotografia · Colunas: total de ocorrências · Linhas: redução líquida e novas ocorrências</div><canvas id="evolutionChart"></canvas></div><div class="section"><h2>Tratadas e novas ocorrências</h2><div class="chart-note">Tratadas: deixaram o alerta desde a fotografia anterior · Novas: passaram a aparecer. Redução líquida não equivale necessariamente a quantidade tratada.</div><div id="evolutionBreakdown"></div></div></div>
-      <div class="section" style="margin-top:12px"><h2>Histórico detalhado</h2><div id="evolutionTable"></div></div>
+      <div class="section" style="margin-top:12px"><h2>Histórico detalhado</h2><div id="evolutionTable"></div></div><div class="section" style="margin-top:12px"><h2>Detalhamento dos movimentos dos alertas</h2><div class="chart-note">Comparação entre fotografias consecutivas. A data de resolução é a primeira fotografia em que o alerta deixou de aparecer, não necessariamente a data exata da correção. O SLA é contado em dias corridos desde a entrada na armazenagem, quando disponível.</div><div class="filters"><label>Movimento <select id="evolutionMovementFilter"><option value="all">Deixaram os alertas e Novas</option><option value="treated">Deixaram os alertas</option><option value="added">Novas</option></select></label></div><div id="evolutionMovementDetails"></div></div>
     </div>
   </section>
   <section id="quality" class="page"><div class="grid cards" id="qualityCards"></div><div class="section" style="margin-top:12px"><h2>Qualidade e confiabilidade dos números de série</h2><div class="export-inline"><button class="btn" type="button" data-export-occurrences="qualityDetails">Exportar ocorrências CSV</button></div><div id="qualityDetails"></div></div><div class="section" style="margin-top:12px"><h2>Falhas de confiabilidade por processo</h2><div class="export-inline"><button class="btn" type="button" data-export-occurrences="qualityFooter">Exportar ocorrências CSV</button></div><div id="qualityFooter"></div></div></section>
@@ -221,7 +221,12 @@ function evolutionCurrent(){let a=state.issues, result={};
  return result;
 }
 function evolutionCapture(iso){if(state.filterMonth){let previous=state.filterMonth;state.filterMonth='';rebuildView();state.filterMonth=previous;let full=evolutionCurrent();rebuildView();return evolutionCaptureSnapshot(iso,full)}return evolutionCaptureSnapshot(iso,evolutionCurrent())}
-function evolutionCaptureSnapshot(iso,metrics){if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length)return;let date=evolutionDay(iso),h=evolutionHistory();let existing=h.findIndex(x=>x.date===date);let snap={date,metrics,updated:iso||new Date().toISOString()};if(existing>=0)h[existing]=snap;else h.push(snap);h.sort((a,b)=>a.date.localeCompare(b.date));try{evolutionSave(h)}catch(e){console.warn('Histórico local não pôde ser salvo:',e)}renderEvolution()}
+// Conserva datas de entrada conhecidas nas fotografias futuras; não inventa datas históricas.
+function evolutionEntryDates(){
+ const map={};for(const r of state.rawData.arm){const s=serialInfo(field(r,['Nº_DE_SÉRIE']));if(!s.valid)continue;const dt=dateObj(field(r,['ENTRADA']));if(!dt)continue;const date=[dt.getFullYear(),String(dt.getMonth()+1).padStart(2,'0'),String(dt.getDate()).padStart(2,'0')].join('-');if(!map[s.n]||date<map[s.n])map[s.n]=date}
+ return map;
+}
+function evolutionCaptureSnapshot(iso,metrics){if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length)return;let date=evolutionDay(iso),h=evolutionHistory();let existing=h.findIndex(x=>x.date===date);let snap={date,metrics,updated:iso||new Date().toISOString(),entryDates:evolutionEntryDates()};if(existing>=0)h[existing]=snap;else h.push(snap);h.sort((a,b)=>a.date.localeCompare(b.date));try{evolutionSave(h)}catch(e){console.warn('Histórico local não pôde ser salvo:',e)}renderEvolution()}
 function evolutionDelta(prev,cur){let before=new Set(prev?.ids||[]),after=new Set(cur?.ids||[]);if(!prev||!cur||!Array.isArray(prev.ids)||!Array.isArray(cur.ids))return null;return {treated:[...before].filter(x=>!after.has(x)).length,added:[...after].filter(x=>!before.has(x)).length}}
 const evolutionSelectedTopics=new Set(['receivedMissing']);
 function evolutionSetupPicker(){
@@ -248,12 +253,36 @@ function evolutionAggregateDelta(prior,current){
  for(let k of evolutionSelectedTopics){let p=prior.entries.find(x=>x.key===k)?.metric,c=current.entries.find(x=>x.key===k)?.metric,d=evolutionDelta(p,c);if(!d){complete=false;continue}treated+=d.treated;added+=d.added}
  return complete?{treated,added}:null;
 }
+function evolutionMovementRows(history,keys){
+ const rows=[];const today=evolutionDay();const days=(a,b)=>{const d1=new Date(a+'T12:00:00Z'),d2=new Date(b+'T12:00:00Z');return Number.isFinite(d1.getTime())&&Number.isFinite(d2.getTime())?Math.max(0,Math.floor((d2-d1)/86400000)):null};
+ for(let i=1;i<history.length;i++){
+  const before=history[i-1],after=history[i];
+  for(const key of keys){const a=before.metrics[key],b=after.metrics[key];if(!Array.isArray(a?.ids)||!Array.isArray(b?.ids))continue;
+   const old=new Set(a.ids),now=new Set(b.ids);const label=EVOLUTION_TOPICS.find(t=>t[0]===key)?.[2]||key;
+   for(const [type,ids] of [['treated',[...old].filter(id=>!now.has(id))],['added',[...now].filter(id=>!old.has(id))]])for(const serial of ids){
+    const entry=after.entryDates?.[serial]||before.entryDates?.[serial]||null;
+    // Apenas movimentos ainda pendentes hoje usam a data atual para o SLA.
+    const stillPending=type==='added'&&history[history.length-1].metrics[key]?.ids?.includes(serial);
+    const end=type==='treated'?after.date:(stillPending?today:null);
+    rows.push({type,label,serial,entry,resolved:type==='treated'?after.date:null,observed:after.date,days:entry&&end?days(entry,end):null,stillPending});
+   }
+  }
+ }
+ return rows.sort((a,b)=>(b.days??-1)-(a.days??-1)||b.observed.localeCompare(a.observed));
+}
+function renderEvolutionMovement(history,keys){
+ const target=$('evolutionMovementDetails');if(!target)return;
+ const filter=$('evolutionMovementFilter').value;
+ const rows=evolutionMovementRows(history,keys.filter(k=>EVOLUTION_TOPICS.find(t=>t[0]===k)?.[3]==='alert')).filter(r=>filter==='all'||r.type===filter);
+ if(!rows.length){target.innerHTML='<div class="empty">Não há movimentos identificáveis entre fotografias para os indicadores e o filtro selecionados.</div>';return}
+ target.innerHTML=`<div class="chart-note">${rows.length.toLocaleString('pt-BR')} movimento(s) · exibindo até 500 registros · SLA em dias corridos, ordenado do maior para o menor. “—” indica data indisponível.</div><div class="table-wrap"><table><thead><tr><th>Movimento</th><th>Indicador</th><th>Nº de série / identificação</th><th>Entrada na armazenagem</th><th>Data em que deixou o alerta</th><th>Fotografia do movimento</th><th>SLA (dias)</th></tr></thead><tbody>${rows.slice(0,500).map(r=>`<tr><td>${r.type==='treated'?'Deixaram os alertas':'Novas'}</td><td>${esc(r.label)}</td><td>${esc(r.serial)}</td><td>${r.entry?esc(r.entry):'—'}</td><td>${r.resolved?esc(r.resolved):'—'}</td><td>${esc(r.observed)}</td><td>${r.days===null?'—':r.days.toLocaleString('pt-BR')}${r.stillPending?' (pendente)':''}</td></tr>`).join('')}</tbody></table></div>`;
+}
 function renderEvolution(){
  if(!$('evolutionPickerBtn'))return;
  evolutionSyncPicker();let keys=[...evolutionSelectedTopics],h=evolutionHistory();
- if(!keys.length){$('evolutionCards').innerHTML='';$('evolutionBreakdown').innerHTML='<div class="empty">Nenhum indicador selecionado. Abra o seletor para escolher um ou mais tópicos.</div>';$('evolutionTable').innerHTML='';canvasChart('evolutionChart',[],[],{});return}
+ if(!keys.length){$('evolutionCards').innerHTML='';$('evolutionBreakdown').innerHTML='<div class="empty">Nenhum indicador selecionado. Abra o seletor para escolher um ou mais tópicos.</div>';$('evolutionTable').innerHTML='';$('evolutionMovementDetails').innerHTML='<div class="empty">Sem dados para detalhamento.</div>';canvasChart('evolutionChart',[],[],{});return}
  let series=evolutionAggregate(h,keys);
- if(!series.length){$('evolutionCards').innerHTML='';$('evolutionBreakdown').innerHTML='<div class="empty">O histórico começará a ser registrado quando as quatro bases publicadas forem carregadas neste navegador.</div>';$('evolutionTable').innerHTML='';canvasChart('evolutionChart',[],[],{});return}
+ if(!series.length){$('evolutionCards').innerHTML='';$('evolutionBreakdown').innerHTML='<div class="empty">O histórico começará a ser registrado quando as quatro bases publicadas forem carregadas neste navegador.</div>';$('evolutionTable').innerHTML='';$('evolutionMovementDetails').innerHTML='<div class="empty">Sem dados para detalhamento.</div>';canvasChart('evolutionChart',[],[],{});return}
  let current=series[series.length-1],prior=series.length>1?series[series.length-2]:null,delta=prior?evolutionAggregateDelta(prior,current):null,net=prior?prior.v-current.v:null;
  let cards=[['Fotografia mais recente',current.v.toLocaleString('pt-BR'),current.date],['Fotografias',series.length,'dias registrados'],['Indicadores selecionados',keys.length,'soma de ocorrências'],['Variação líquida',net===null?'—':(net>0?'-':'')+Math.abs(net).toLocaleString('pt-BR'),net===null?'aguardando comparação':net>0?'redução de ocorrências':net<0?'aumento de ocorrências':'sem variação']];
  if(keys.every(k=>EVOLUTION_TOPICS.find(t=>t[0]===k)?.[3]==='alert'))cards.push(['Tratadas',delta?delta.treated.toLocaleString('pt-BR'):'—','ocorrências que saíram dos alertas'],['Novas',delta?delta.added.toLocaleString('pt-BR'):'—','ocorrências que entraram nos alertas']);
@@ -263,6 +292,7 @@ function renderEvolution(){
  let breakdown=prior?`<div class="alert ${net>0?'ok':'warn'}"><b>${esc(prior.date)} → ${esc(current.date)}</b>Anterior: ${prior.v.toLocaleString('pt-BR')} · Atual: ${current.v.toLocaleString('pt-BR')} · Redução líquida: ${net.toLocaleString('pt-BR')}.</div>`+(delta?`<div class="alert ok"><b>${delta.treated.toLocaleString('pt-BR')} ocorrência(s) deixaram os alertas</b>Somatório por indicador; sujeito à validação operacional.</div><div class="alert warn"><b>${delta.added.toLocaleString('pt-BR')} nova(s) ocorrência(s)</b>Somatório por indicador.</div>`:'<div class="alert warn">Um ou mais indicadores são agregados ou não possuem identificação individual. Não é possível calcular com segurança as ocorrências tratadas e novas para toda a seleção.</div>'):'<div class="alert warn"><b>Primeira fotografia registrada</b>Aguardando uma segunda data para calcular a evolução.</div>';
  $('evolutionBreakdown').innerHTML=breakdown+`<div class="table-wrap" style="margin-top:12px;max-height:260px"><table><thead><tr><th>Indicador selecionado</th><th>Ocorrências atuais</th></tr></thead><tbody>${details}</tbody></table></div>`;
  let rows=series.map((x,i)=>{let p=i?series[i-1]:null,d=p?evolutionAggregateDelta(p,x):null;return `<tr><td>${esc(x.date)}</td><td>${x.v.toLocaleString('pt-BR')}</td><td>${p?(p.v-x.v).toLocaleString('pt-BR'):'—'}</td><td>${d?d.treated.toLocaleString('pt-BR'):'—'}</td><td>${d?d.added.toLocaleString('pt-BR'):'—'}</td></tr>`}).reverse();
+ renderEvolutionMovement(h,keys);
  $('evolutionTable').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Data da fotografia</th><th>Ocorrências (soma)</th><th>Redução líquida</th><th>Deixaram os alertas</th><th>Novas</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 function evolutionExport(){let blob=new Blob([JSON.stringify({schema:1,exportedAt:new Date().toISOString(),snapshots:evolutionHistory()},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='historico_alertas_dashboard.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
@@ -303,12 +333,12 @@ function opExportReceipt(onlySelected){let rows=(onlySelected?opCollectionFilter
 // Grafico de linha exclusivo da aba Evolucao; datas horizontais e amostradas para evitar sobreposicao.
 function evolutionLineChart(labels,totals,reductions,newItems){
  const c=$('evolutionChart');if(!c)return;const ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;if(w<40||h<40)return;c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);if(!labels.length){ctx.fillStyle='#98a2b3';ctx.textAlign='center';ctx.fillText('Sem dados',w/2,h/2);return}
- const style=getComputedStyle(document.body),muted=style.getPropertyValue('--muted'),ink=style.getPropertyValue('--text'),border=style.getPropertyValue('--border');const p={l:58,r:16,t:47,b:52},pw=w-p.l-p.r,ph=h-p.t-p.b;
+ const style=getComputedStyle(document.body),muted=style.getPropertyValue('--muted'),ink=style.getPropertyValue('--text'),border=style.getPropertyValue('--border');const p={l:58,r:16,t:58,b:52},pw=w-p.l-p.r,ph=h-p.t-p.b;
  const all=[...totals,...reductions.filter(Number.isFinite),...newItems.filter(Number.isFinite)],hi=Math.max(1,...all,0),lo=Math.min(0,...all,0),span=hi-lo;
  const y=v=>p.t+(hi-v)/span*ph,x=i=>p.l+(i+.5)*pw/labels.length;
  ctx.font='11px Segoe UI';ctx.strokeStyle=border;ctx.fillStyle=muted;for(let j=0;j<5;j++){const val=hi-span*j/4,yy=y(val);ctx.beginPath();ctx.moveTo(p.l,yy);ctx.lineTo(w-p.r,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString('pt-BR'),p.l-8,yy+4)}
- const slot=pw/labels.length,bw=Math.max(2,Math.min(32,slot*.6));totals.forEach((v,i)=>{ctx.fillStyle='#0464FC';const yy=y(v),zero=y(0);ctx.fillRect(x(i)-bw/2,Math.min(yy,zero),bw,Math.max(1,Math.abs(zero-yy)))});
- function line(values,color){ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();let started=false;values.forEach((v,i)=>{if(!Number.isFinite(v)){started=false;return}if(!started){ctx.moveTo(x(i),y(v));started=true}else ctx.lineTo(x(i),y(v))});ctx.stroke();values.forEach((v,i)=>{if(!Number.isFinite(v))return;ctx.fillStyle=color;ctx.beginPath();ctx.arc(x(i),y(v),3.2,0,Math.PI*2);ctx.fill()})}
+ const slot=pw/labels.length,bw=Math.max(2,Math.min(32,slot*.6));totals.forEach((v,i)=>{ctx.fillStyle='#0464FC';const yy=y(v),zero=y(0);ctx.fillRect(x(i)-bw/2,Math.min(yy,zero),bw,Math.max(1,Math.abs(zero-yy)));if(slot>=29){ctx.font='10px Segoe UI';ctx.fillStyle=ink;ctx.textAlign='center';ctx.fillText(Number(v).toLocaleString('pt-BR'),x(i),Math.max(p.t+11,yy-7))}});
+ function line(values,color){ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();let started=false;values.forEach((v,i)=>{if(!Number.isFinite(v)){started=false;return}if(!started){ctx.moveTo(x(i),y(v));started=true}else ctx.lineTo(x(i),y(v))});ctx.stroke();values.forEach((v,i)=>{if(!Number.isFinite(v))return;ctx.fillStyle=color;ctx.beginPath();ctx.arc(x(i),y(v),3.2,0,Math.PI*2);ctx.fill();if(slot>=45){ctx.font='10px Segoe UI';ctx.textAlign='center';ctx.fillText(Number(v).toLocaleString('pt-BR'),x(i),Math.max(p.t+12,y(v)+(color==='#12B76A'?-10:16)))}})}
  line(reductions,'#12B76A');line(newItems,'#F79009');
  const legend=[['#0464FC','Total de ocorrências'],['#12B76A','Redução líquida'],['#F79009','Novas ocorrências']];let lx=p.l;ctx.font='10px Segoe UI';legend.forEach(([color,label])=>{ctx.fillStyle=color;ctx.fillRect(lx,10,10,10);ctx.fillStyle=ink;ctx.textAlign='left';ctx.fillText(label,lx+14,19);lx+=ctx.measureText(label).width+32});
  const step=Math.max(1,Math.ceil(labels.length/Math.max(2,Math.floor(pw/74))));labels.forEach((label,i)=>{if(i%step&&i!==labels.length-1)return;ctx.fillStyle=muted;ctx.textAlign='center';ctx.font='10px Segoe UI';const v=String(label);ctx.fillText(/^\d{4}-\d{2}-\d{2}$/.test(v)?v.slice(8)+'/'+v.slice(5,7):v,x(i),h-20)})
@@ -352,6 +382,7 @@ async function refresh(){let selected=[['rec',$('fRec').files[0]],['emb',$('fEmb
 $('monthFilter').addEventListener('change',applyMonthFilter);
 $('refreshBtn').onclick=refresh;$('serialBtn').onclick=renderTrace;$('serialInput').addEventListener('keydown',e=>{if(e.key==='Enter')renderTrace()});$('themeBtn').onclick=()=>{document.body.classList.toggle('dark');$('themeBtn').textContent=document.body.classList.contains('dark')?'☾ Tema escuro':'☀ Tema claro';if(state.data.rec.length){renderOverview();renderRec();renderEmb();renderArm();renderExp();renderAlerts();renderQuality({rec:buildIndex('rec'),emb:buildIndex('emb'),arm:buildIndex('arm'),exp:buildIndex('exp')});renderProcessDetails()}};
 $('evolutionPickerBtn').addEventListener('click',()=>{let m=$('evolutionMenu'),open=m.hidden;m.hidden=!open;$('evolutionPickerBtn').setAttribute('aria-expanded',String(open))});
+$('evolutionMovementFilter').addEventListener('change',renderEvolution);
 $('evolutionOptions').addEventListener('change',e=>{if(!e.target.matches('input[type=checkbox]'))return;if(e.target.checked)evolutionSelectedTopics.add(e.target.value);else evolutionSelectedTopics.delete(e.target.value);renderEvolution()});
 $('evolutionSelectAll').addEventListener('click',()=>{EVOLUTION_TOPICS.forEach(t=>evolutionSelectedTopics.add(t[0]));renderEvolution()});
 function evolutionClearSelection(){evolutionSelectedTopics.clear();renderEvolution()}

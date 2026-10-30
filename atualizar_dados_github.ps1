@@ -91,6 +91,13 @@ try {
     foreach ($line in $status) {
         if ($line.Length -lt 4) { continue }
         $path = $line.Substring(3).Trim('"') -replace '\\','/'
+        # index.html pode estar modificado localmente: nunca incluir nem descartar
+        # essas alteracoes na publicacao automatica de bases.
+        if ($path -eq 'index.html' -and $line.Substring(0,2) -notmatch 'U|AA|DD') {
+            if ($line.Substring(0,1) -ne ' ') { throw 'index.html esta no stage do Git. Execute git restore --staged -- index.html antes de atualizar as bases.' }
+            Write-Host 'AVISO: index.html modificado localmente; sera preservado e nao publicado.' -ForegroundColor Yellow
+            continue
+        }
         if ($line.Substring(0,2) -match 'U|AA|DD' -or $path -notin $publishPaths) {
             throw "Alteracao Git fora das bases publicadas: $line. Publique/resolva manualmente antes de continuar."
         }
@@ -112,8 +119,14 @@ try {
         Invoke-Git -GitArgs (@('restore','--staged','--worktree','--') + $publishPaths) | Out-Null
         $cleanedLocalData = $true
     }
-    Invoke-Git -GitArgs @('pull','--ff-only','origin',$branch) | Out-Null
-    Write-Host 'Repositorio sincronizado com origin/master.'
+    # Fetch nao altera o index.html. Nunca executar pull/merge com edicoes locais.
+    Invoke-Git -GitArgs @('fetch','origin',$branch) | Out-Null
+    & git.exe merge-base --is-ancestor "origin/$branch" HEAD
+    $remoteAncestor = $LASTEXITCODE
+    if ($remoteAncestor -ne 0) {
+        throw 'O GitHub possui commits que ainda nao estao nesta pasta. Para proteger o index.html local, sincronize manualmente o repositorio antes de atualizar as bases.'
+    }
+    Write-Host 'Historico remoto conferido; alteracoes locais do HTML preservadas.'
 
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
     foreach ($item in $selected) {

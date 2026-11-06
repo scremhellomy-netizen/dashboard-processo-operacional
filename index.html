@@ -65,8 +65,8 @@ body.dark .evo-sla{color:#35ffbd}body.dark .evo-sla.mid{color:#ffe45a}body.dark 
 
   <section id="alerts" class="page"><div class="section"><h2>Central de alertas operacionais</h2><div class="filters"><label>Depósito <select id="alertsDepositFilter"><option value="">Todos os depósitos</option></select></label><label>Tipo de ocorrência <select id="alertsTopicFilter"><option value="">Todas as ocorrências</option><option>Recebimento sem destino</option><option>Expedido ainda armazenado</option><option>Duplicidade na armazenagem</option><option>Armazenagem ST sem embalagem</option><option>Similaridade ≥ 98%</option></select></label></div><div class="export-inline"><button class="btn" type="button" data-export-occurrences="allAlerts">Exportar ocorrências CSV</button></div><div id="allAlerts"></div></div><div class="section" style="margin-top:12px"><h2>Resumo das ocorrências por processo</h2><div class="export-inline"><button class="btn" type="button" data-export-occurrences="alertsFooter">Exportar ocorrências CSV</button></div><div id="alertsFooter"></div></div></section>
   <section id="evolution" class="page">
-    <div class="section"><h2>Evolução diária dos alertas e indicadores</h2><div class="chart-note">Histórico registrado neste navegador ao carregar bases publicadas. Cada data representa uma fotografia das quatro bases, não o dia de ocorrência dos registros. As quantidades tratadas são calculadas pela identificação dos números de série que deixaram de aparecer em cada alerta; novas ocorrências são exibidas separadamente. Não é possível reconstruir dias anteriores sem fotografias salvas.</div>
-      <div class="filters" style="align-items:center"><label for="evolutionPickerBtn">Processos / indicadores</label><div class="evo-picker" id="evolutionPicker"><button type="button" class="btn" id="evolutionPickerBtn" aria-expanded="false" aria-controls="evolutionMenu">Selecionar indicadores <span>▾</span></button><div id="evolutionMenu" class="evo-menu" hidden><div class="evo-picker-actions"><button type="button" class="btn" id="evolutionSelectAll">Selecionar todos</button><button type="button" class="btn" id="evolutionClearInside">Limpar</button></div><div id="evolutionOptions"></div></div></div><button type="button" class="btn" id="evolutionClear">Limpar filtros</button><button class="btn" id="exportHistory">Exportar histórico</button><button class="btn" id="recoverNovHistory" type="button" style="border-color:#0aa86b">Recuperar 03–05/11</button><span id="recoverNovStatus" style="font-size:12px"></span><button class="btn" id="exportEvolutionCSV" type="button">Exportar ocorrências CSV</button><label class="btn" for="importHistory" style="cursor:pointer">Importar histórico</label><input type="file" id="importHistory" accept=".json,application/json" style="display:none"></div>
+    <div class="section"><h2>Evolução diária dos alertas e indicadores</h2><div class="chart-note">Histórico publicado no GitHub, com fotografias locais antigas usadas apenas quando não houver registro publicado. Cada data representa uma fotografia das quatro bases, não o dia de ocorrência dos registros. As quantidades tratadas são calculadas pela identificação dos números de série que deixaram de aparecer em cada alerta; novas ocorrências são exibidas separadamente. Não é possível reconstruir dias anteriores sem fotografias salvas.</div>
+      <div class="filters" style="align-items:center"><label for="evolutionPickerBtn">Processos / indicadores</label><div class="evo-picker" id="evolutionPicker"><button type="button" class="btn" id="evolutionPickerBtn" aria-expanded="false" aria-controls="evolutionMenu">Selecionar indicadores <span>▾</span></button><div id="evolutionMenu" class="evo-menu" hidden><div class="evo-picker-actions"><button type="button" class="btn" id="evolutionSelectAll">Selecionar todos</button><button type="button" class="btn" id="evolutionClearInside">Limpar</button></div><div id="evolutionOptions"></div></div></div><button type="button" class="btn" id="evolutionClear">Limpar filtros</button><button class="btn" id="exportHistory">Exportar histórico</button><button class="btn" id="exportEvolutionCSV" type="button">Exportar ocorrências CSV</button><label class="btn" for="importHistory" style="cursor:pointer">Importar histórico</label><input type="file" id="importHistory" accept=".json,application/json" style="display:none"></div>
       <div class="evo-selected" id="evolutionSelected"></div><div class="chart-note" id="evolutionSelectionNote">Selecione um ou mais indicadores. A seleção múltipla soma as ocorrências de cada indicador; um mesmo equipamento pode aparecer em mais de um alerta.</div><div class="grid cards" id="evolutionCards"></div>
       <div class="grid two" style="margin-top:12px"><div class="section"><h2>Ocorrências por data</h2><div class="chart-note">Eixo horizontal: data da fotografia · Colunas: total de ocorrências · Linhas: redução líquida e novas ocorrências</div><canvas id="evolutionChart"></canvas></div><div class="section"><h2>Tratadas e novas ocorrências</h2><div class="chart-note">Tratadas: deixaram o alerta desde a fotografia anterior · Novas: passaram a aparecer. Redução líquida não equivale necessariamente a quantidade tratada.</div><div id="evolutionBreakdown"></div></div></div>
       <div class="section" style="margin-top:12px"><h2>Histórico detalhado</h2><div id="evolutionTable"></div></div><div class="section" style="margin-top:12px"><h2>Detalhamento dos movimentos dos alertas</h2><div class="chart-note">Comparação entre fotografias consecutivas. A data de resolução é a primeira fotografia em que o alerta deixou de aparecer, não necessariamente a data exata da correção. O SLA é contado em dias corridos desde a entrada na armazenagem, quando disponível.</div><div class="filters"><label>Movimento <select id="evolutionMovementFilter"><option value="all">Deixaram os alertas e Novas</option><option value="treated">Deixaram os alertas</option><option value="added">Novas</option></select></label></div><div id="evolutionMovementDetails"></div></div>
@@ -209,7 +209,14 @@ const EVOLUTION_TOPICS=[
  ['armOver90','Armazenagem','Registros em estoque há mais de 90 dias','metric'],
  ['expCancelled','Expedição','Registros não ativos na expedição','metric']
 ];
-function evolutionHistory(){try{let h=JSON.parse(localStorage.getItem(EVOLUTION_KEY)||'[]');return Array.isArray(h)?h.filter(x=>x&&/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&x.metrics&&typeof x.metrics==='object').sort((a,b)=>a.date.localeCompare(b.date)):[]}catch(_){return []}}
+let evolutionPublishedHistory=[];
+function evolutionHistory(){
+ let local=[];try{local=JSON.parse(localStorage.getItem(EVOLUTION_KEY)||'[]')}catch(_){local=[]}
+ const merged=new Map();
+ for(const x of (Array.isArray(local)?local:[]))if(x&&/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&x.metrics)merged.set(x.date,x);
+ for(const x of evolutionPublishedHistory)if(x&&/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&x.metrics)merged.set(x.date,x);
+ return [...merged.values()].sort((a,b)=>a.date.localeCompare(b.date));
+}
 // Guarda detalhes somente das series presentes nos alertas de cada fotografia.
 // Evita exceder a cota do localStorage com todo o estoque a cada atualizacao.
 function evolutionCompactSnapshot(s){
@@ -417,7 +424,9 @@ function renderAll(q){fillOperationalFilters();renderOverview();renderRec();rend
 
 async function readUrl(url){let resp=await fetch(url,{cache:'no-store'});if(!resp.ok)throw new Error(`Não foi possível carregar ${url} (${resp.status}).`);let buf=await resp.arrayBuffer();let text;if(url.toLowerCase().endsWith('.gz')){if(!('DecompressionStream' in window))throw new Error('Seu navegador não suporta leitura de .gz. Use uma versão atualizada do Edge ou Chrome.');text=await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text()}else{text=new TextDecoder('utf-8').decode(buf)}return JSON.parse(text)}
 const BUNDLED_FILES={rec:'data/recebimento.json.gz',emb:'data/embalagem.json.gz',arm:'data/armazenagem.json.gz',exp:'data/expedicao.json.gz'};
-async function loadBundledData(){try{$('status').innerHTML='Carregando dados publicados... <span>Preparando as quatro bases do dashboard.</span>';let manifest=null;try{manifest=await readUrl('data/manifest.json')}catch(_){manifest=null}for(const k of ['rec','emb','arm','exp']){let obj=await readUrl(BUNDLED_FILES[k]),p=prepare(k,obj);state.rawData[k]=p.mapped;state.cols[k]=p.cols}populateMonthFilter();state.updated=manifest?.atualizado_em?new Date(manifest.atualizado_em).toLocaleString('pt-BR'):'Não informada';$('publishedAt').textContent='Última atualização: '+state.updated;rebuildView();$('status').innerHTML=`Dados publicados carregados com sucesso em <b>${esc(state.updated)}</b>. <span>Use o filtro de mês ou Rastreabilidade para consultar os dados.</span>`;evolutionCapture(manifest?.atualizado_em||null);return true}catch(e){console.error(e);$('status').innerHTML=`<span class="danger"><b>Falha ao carregar os dados publicados:</b> ${esc(e.message)}</span>`;return false}}
+async function loadBundledData(){try{$('status').innerHTML='Carregando dados publicados... <span>Preparando as quatro bases do dashboard.</span>';let manifest=null;try{manifest=await readUrl('data/manifest.json')}catch(_){manifest=null}for(const k of ['rec','emb','arm','exp']){let obj=await readUrl(BUNDLED_FILES[k]),p=prepare(k,obj);state.rawData[k]=p.mapped;state.cols[k]=p.cols}try{const published=await readUrl('data/historico_alertas.json');evolutionPublishedHistory=Array.isArray(published.snapshots)?published.snapshots:[]}
+ catch(e){console.warn('Histórico publicado indisponível',e);evolutionPublishedHistory=[]}
+ populateMonthFilter();state.updated=manifest?.atualizado_em?new Date(manifest.atualizado_em).toLocaleString('pt-BR'):'Não informada';$('publishedAt').textContent='Última atualização: '+state.updated;rebuildView();$('status').innerHTML=`Dados publicados carregados com sucesso em <b>${esc(state.updated)}</b>. <span>Use o filtro de mês ou Rastreabilidade para consultar os dados.</span>`;return true}catch(e){console.error(e);$('status').innerHTML=`<span class="danger"><b>Falha ao carregar os dados publicados:</b> ${esc(e.message)}</span>`;return false}}
 async function refresh(){let selected=[['rec',$('fRec').files[0]],['emb',$('fEmb').files[0]],['arm',$('fArm').files[0]],['exp',$('fExp').files[0]]];let allSelected=selected.every(x=>x[1]);if(!allSelected){if(state.rawData.rec.length&&state.rawData.emb.length&&state.rawData.arm.length&&state.rawData.exp.length){await loadBundledData();return}alert('Os dados publicados serão carregados automaticamente. Para usar arquivos locais diferentes, selecione os quatro arquivos: Recebimento, Embalagem, Armazenagem e Expedição.');return}try{$('status').innerHTML='Lendo e tratando as quatro bases... <span>Isso pode levar alguns segundos devido ao volume da Expedição.</span>';for(const [k,f] of selected){let obj=await readFile(f),p=prepare(k,obj);state.rawData[k]=p.mapped;state.cols[k]=p.cols;$('status').innerHTML=`Processando ${k}... <span>${state.rawData[k].length.toLocaleString('pt-BR')} registros.</span>`}populateMonthFilter();state.updated=new Date().toLocaleString('pt-BR');$('publishedAt').textContent='Última atualização: '+state.updated+' (arquivos locais, não publicados)';rebuildView();$('status').innerHTML=`Dados atualizados com sucesso em <b>${esc(state.updated)}</b>. <span>Use o filtro de mês ou Rastreabilidade para consultar os dados.</span>`}catch(e){console.error(e);$('status').innerHTML=`<span class="danger"><b>Falha na atualização:</b> ${esc(e.message)}</span>`;alert('Não foi possível atualizar os dados.\n\n'+e.message)}}
 [['fRec','nRec'],['fEmb','nEmb'],['fArm','nArm'],['fExp','nExp']].forEach(([i,n])=>$(i).addEventListener('change',e=>$(n).textContent=e.target.files[0]?.name||'Nenhum arquivo'));
 $('monthFilter').addEventListener('change',applyMonthFilter);
@@ -430,51 +439,7 @@ function evolutionClearSelection(){evolutionSelectedTopics.clear();renderEvoluti
 $('evolutionClearInside').addEventListener('click',evolutionClearSelection);$('evolutionClear').addEventListener('click',()=>{evolutionClearSelection();$('evolutionMenu').hidden=true;$('evolutionPickerBtn').setAttribute('aria-expanded','false')});
 document.addEventListener('click',e=>{if(!e.target.closest('#evolutionPicker')){$('evolutionMenu').hidden=true;$('evolutionPickerBtn').setAttribute('aria-expanded','false')}});$('exportHistory').addEventListener('click',evolutionExport);
 // Recuperação sob demanda: usa versões imutáveis do GitHub; não altera arquivos publicados.
-const NOV_HISTORY_COMMITS=[
- ['2026-11-03','03c522eb817ef95bba314a5e19a8e9e5b6e85028'],
- ['2026-11-04','d1a456dfef6a411c6609a999529a3366564be6c9'],
- ['2026-11-05','7efe2e92d4cce47cd5eec937f8313cb0f54c5169']
-];
-async function recoverNovemberHistory(){
- const btn=$('recoverNovHistory'),status=$('recoverNovStatus');
- if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length){alert('Aguarde as quatro bases atuais carregarem antes da recuperação.');return}
- if(!confirm('Antes de continuar, exporte o histórico atual pelo botão Exportar histórico. Deseja recuperar as fotografias reais de 03, 04 e 05/11 a partir dos commits do GitHub? As datas existentes não serão sobrescritas.'))return;
- btn.disabled=true;
- const savedRaw=state.rawData,savedCols=state.cols,savedMonth=state.filterMonth;
- let recovered=[],errors=[];
- try{
-  for(const [day,commit] of NOV_HISTORY_COMMITS){
-   if(evolutionHistory().some(s=>s.date===day)){status.textContent=day+': fotografia já existe; preservada.';continue}
-   status.textContent='Recuperando '+day+' (quatro bases históricas)...';
-   try{
-    const root='https://raw.githubusercontent.com/scremhellomy-netizen/dashboard-processo-operacional/'+commit+'/data/';
-    const manifest=await readUrl(root+'manifest.json');
-    const actual=evolutionDay(manifest.atualizado_em);
-    if(actual!==day)throw Error('Data do manifesto ('+actual+') diferente de '+day);
-    const raw={},cols={};
-    for(const kind of ['rec','emb','arm','exp']){
-     const data=await readUrl(root+BUNDLED_FILES[k].replace(/^data\//,''));
-     const prepared=prepare(kind,data);
-     if(!prepared.mapped.length)throw Error('Base '+kind+' vazia');
-     raw[kind]=prepared.mapped;cols[kind]=prepared.cols;
-    }
-    state.rawData=raw;state.cols=cols;state.filterMonth='';rebuildView();
-    const metrics=evolutionCurrent();
-    const snapshot={date:day,metrics,updated:manifest.atualizado_em,entryDates:evolutionEntryDates(),storageDetails:evolutionStorageDetails()};
-    evolutionSave([...evolutionHistory(),snapshot].sort((a,b)=>a.date.localeCompare(b.date)));
-    recovered.push(day);
-   }catch(e){errors.push(day+': '+e.message);console.error('Falha na recuperação '+day,e)}
-  }
- }finally{
-  state.rawData=savedRaw;state.cols=savedCols;state.filterMonth=savedMonth;
-  try{rebuildView()}catch(e){console.error('Falha ao restaurar a visão atual',e)}
-  btn.disabled=false;
-  status.textContent='Recuperadas: '+(recovered.join(', ')||'nenhuma')+(errors.length?' | Falhas: '+errors.join(' / '):'');
-  if(recovered.length)alert('Fotografias recuperadas: '+recovered.join(', ')+'. Exporte novamente o histórico para manter um backup.');
-  if(errors.length)alert('Algumas datas não puderam ser recuperadas:\n'+errors.join('\n'));
- }
-}
-$('recoverNovHistory').addEventListener('click',recoverNovemberHistory);
+
 $('exportEvolutionCSV').addEventListener('click',()=>{let keys=[...evolutionSelectedTopics],rows=[];for(const snap of evolutionHistory())for(const k of keys){let m=snap.metrics[k];if(!m)continue;let name=EVOLUTION_TOPICS.find(x=>x[0]===k)?.[2]||k;if(Array.isArray(m.ids)&&m.ids.length)m.ids.forEach(serial=>rows.push([snap.date,name,serial,m.count]));else rows.push([snap.date,name,'Sem identificação individual',m.count])}opCSV('historico_ocorrencias_evolucao',['Data fotografia','Indicador','Série / Identificação','Total do indicador'],rows)});$('importHistory').addEventListener('change',e=>{evolutionImport(e.target.files[0]);e.target.value=''});
 $('nav').addEventListener('click',e=>{let b=e.target.closest('.tab');if(!b)return;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');if(state.data.rec.length){requestAnimationFrame(()=>{if(b.dataset.page==='overview')renderOverview();else if(b.dataset.page==='rec')renderRec();else if(b.dataset.page==='emb')renderEmb();else if(b.dataset.page==='arm')renderArm();else if(b.dataset.page==='exp')renderExp();else if(b.dataset.page==='alerts')renderAlerts();else if(b.dataset.page==='evolution')renderEvolution();else if(b.dataset.page==='quality')renderQuality({rec:buildIndex('rec'),emb:buildIndex('emb'),arm:buildIndex('arm'),exp:buildIndex('exp')});renderProcessDetails()})}});
 let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.data.rec.length){renderOverview();renderRec();renderEmb();renderArm();renderExp();renderAlerts();renderQuality({rec:buildIndex('rec'),emb:buildIndex('emb'),arm:buildIndex('arm'),exp:buildIndex('exp')});renderProcessDetails()}},150)});

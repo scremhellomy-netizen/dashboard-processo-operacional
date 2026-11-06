@@ -4,7 +4,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $log = Join-Path $root 'erro_atualizacao.log'
 $branch = 'master'
 $expectedRemote = 'scremhellomy-netizen/dashboard-processo-operacional'
-$publishPaths = @('data/recebimento.json.gz','data/embalagem.json.gz','data/armazenagem.json.gz','data/expedicao.json.gz','data/manifest.json')
+$publishPaths = @('data/recebimento.json.gz','data/embalagem.json.gz','data/armazenagem.json.gz','data/expedicao.json.gz','data/manifest.json','data/historico_alertas.json')
 $backup = $null
 $cleanedLocalData = $false
 $published = $false
@@ -138,6 +138,10 @@ try {
         origem = 'dados publicados pelo responsavel do dashboard'
     }
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $dataDir 'manifest.json') -Encoding UTF8
+    # Geracao no backend, antes do commit. Se falhar, nao publica bases sem fotografia.
+    if (-not (Get-Command node.exe -ErrorAction SilentlyContinue)) { throw 'Node.js nao encontrado no PATH. Instale Node.js LTS para gerar o historico.' }
+    & node.exe (Join-Path $root 'scripts/gerar_historico_alertas.js') --base data --historico data/historico_alertas.json
+    if ($LASTEXITCODE -ne 0) { throw 'Falha ao gerar fotografia dos alertas; publicacao interrompida.' }
     Invoke-Git -GitArgs (@('add','--') + $publishPaths) | Out-Null
     & git.exe diff --cached --quiet -- @publishPaths
     $diffCode = $LASTEXITCODE

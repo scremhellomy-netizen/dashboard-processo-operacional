@@ -210,7 +210,20 @@ const EVOLUTION_TOPICS=[
  ['expCancelled','Expedição','Registros não ativos na expedição','metric']
 ];
 function evolutionHistory(){try{let h=JSON.parse(localStorage.getItem(EVOLUTION_KEY)||'[]');return Array.isArray(h)?h.filter(x=>x&&/^\d{4}-\d{2}-\d{2}$/.test(x.date)&&x.metrics&&typeof x.metrics==='object').sort((a,b)=>a.date.localeCompare(b.date)):[]}catch(_){return []}}
-function evolutionSave(h){localStorage.setItem(EVOLUTION_KEY,JSON.stringify(h.slice(-366)))}
+// Guarda detalhes somente das series presentes nos alertas de cada fotografia.
+// Evita exceder a cota do localStorage com todo o estoque a cada atualizacao.
+function evolutionCompactSnapshot(s){
+ const ids=new Set();
+ for(const m of Object.values(s.metrics||{}))if(Array.isArray(m.ids))for(const id of m.ids){
+  if(typeof id!=='string')continue;
+  ids.add(id);
+  // Alertas de pares usam a forma 'serie ↔ serie'.
+  if(id.includes(' ↔ '))for(const part of id.split(' ↔ '))ids.add(part);
+ }
+ const keep=obj=>{const out={};if(obj&&typeof obj==='object')for(const id of ids)if(Object.prototype.hasOwnProperty.call(obj,id))out[id]=obj[id];return out};
+ return {...s,entryDates:keep(s.entryDates),storageDetails:keep(s.storageDetails)};
+}
+function evolutionSave(h){localStorage.setItem(EVOLUTION_KEY,JSON.stringify(h.slice(-366).map(evolutionCompactSnapshot)))}
 function evolutionDay(iso){let d=iso?new Date(iso):new Date();if(isNaN(d.getTime()))d=new Date();return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)}
 function evolutionInvalid(kind){let result=[];for(const r of state.rawData[kind]){let v=kind==='rec'?field(r,['Nº Série']):kind==='emb'?field(r,['Série']):field(r,['Nº_DE_SÉRIE']);let si=serialInfo(v);if(!si.valid)result.push('registro-'+result.length)}return result}
 function evolutionCurrent(){let a=state.issues, result={};
@@ -243,7 +256,7 @@ function evolutionStorageDetails(){
  }
  return result;
 }
-function evolutionCaptureSnapshot(iso,metrics){if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length)return;let date=evolutionDay(iso),h=evolutionHistory();let existing=h.findIndex(x=>x.date===date);let snap={date,metrics,updated:iso||new Date().toISOString(),entryDates:evolutionEntryDates(),storageDetails:evolutionStorageDetails()};if(existing>=0)h[existing]=snap;else h.push(snap);h.sort((a,b)=>a.date.localeCompare(b.date));try{evolutionSave(h)}catch(e){console.warn('Histórico local não pôde ser salvo:',e)}renderEvolution()}
+function evolutionCaptureSnapshot(iso,metrics){if(!state.rawData.rec.length||!state.rawData.emb.length||!state.rawData.arm.length||!state.rawData.exp.length)return;let date=evolutionDay(iso),h=evolutionHistory();let existing=h.findIndex(x=>x.date===date);let snap={date,metrics,updated:iso||new Date().toISOString(),entryDates:evolutionEntryDates(),storageDetails:evolutionStorageDetails()};if(existing>=0)h[existing]=snap;else h.push(snap);h.sort((a,b)=>a.date.localeCompare(b.date));try{evolutionSave(h)}catch(e){console.error('Histórico local não pôde ser salvo:',e);$('status').innerHTML='<span class="danger"><b>Atenção:</b> a fotografia de '+date+' não pôde ser salva no navegador (limite de armazenamento). Exporte o histórico antes de limpar dados do navegador.</span>'}renderEvolution()}
 function evolutionDelta(prev,cur){let before=new Set(prev?.ids||[]),after=new Set(cur?.ids||[]);if(!prev||!cur||!Array.isArray(prev.ids)||!Array.isArray(cur.ids))return null;return {treated:[...before].filter(x=>!after.has(x)).length,added:[...after].filter(x=>!before.has(x)).length}}
 const evolutionSelectedTopics=new Set(['receivedMissing']);
 function evolutionSetupPicker(){
